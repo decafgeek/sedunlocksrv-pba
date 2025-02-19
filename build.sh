@@ -36,6 +36,9 @@ EXTENSIONS="bash.tcz"
 if [ $SSHBUILD == "TRUE" ]; then
     EXTENSIONS="$EXTENSIONS dropbear.tcz"
 fi
+if [ ! -z "${KEYMAP+x}" ]; then
+    EXTENSIONS="$EXTENSIONS kmaps.tcz"
+fi
 case "$(echo ${SEDUTIL_FORK-} | tr '[:upper:]' '[:lower:]')" in
     "chubbyant")
         SEDUTIL_FORK="ChubbyAnt"
@@ -118,13 +121,22 @@ sed -i "s/::exclude_devices::/${EXCLUDE_NETDEV-}/" "${TMPDIR}/core/etc/init.d/tc
 while [ -n "${EXTENSIONS}" ]; do
     DEPS=""
     for EXTENSION in ${EXTENSIONS}; do
+        MOUNTDIREXT="$(mktemp -d --tmpdir="$(pwd)" 'mnt.XXXXXX')"
         cachetcfile "${EXTENSION}" tcz tcz
         cachetcfile "${EXTENSION}.dep" dep tcz
-        unsquashfs -f -d "${TMPDIR}/core" "${CACHEDIR}/tcz/${EXTENSION}"
+        mount -o loop "${CACHEDIR}/tcz/${EXTENSION}" "${MOUNTDIREXT}"
+        cp -r "${MOUNTDIREXT}/"* "${TMPDIR}/core/"
+        umount "${MOUNTDIREXT}"
+        rm -rfv "${MOUNTDIREXT}"
         DEPS=$(echo "${DEPS}" | cat - "${CACHEDIR}/dep/${EXTENSION}.dep" | sort -u)
     done
     EXTENSIONS="${DEPS}"
 done
+
+if [ ! -z "${KEYMAP+x}" ]; then
+  mkdir -p "${TMPDIR}/core/home/tc"
+  echo -en "${KEYMAP}" > "${TMPDIR}/core/home/tc/keymap"
+fi
 
 if [ $SSHBUILD == "TRUE" ]; then
     # Generate dropbear hostkeys if not existing
